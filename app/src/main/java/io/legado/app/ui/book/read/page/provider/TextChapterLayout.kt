@@ -414,8 +414,10 @@ class TextChapterLayout(
         val layout = if (useZhLayout) {
             val (words, widths) = measureTextSplit(text, widthsArray)
             val indentSize = if (isFirstLine) paragraphIndent.length else 0
+            // ZhLayout 分行排版方案
             ZhLayout(text, textPaint, visibleWidth, words, widths, indentSize)
         } else {
+            // StaticLayout 分行排版方案
             StaticLayout(text, textPaint, visibleWidth, Layout.Alignment.ALIGN_NORMAL, 0f, 0f, true)
         }
         durY = when {
@@ -547,6 +549,7 @@ class TextChapterLayout(
     }
 
     /**
+     * 行内排版调整
      * 有缩进,两端对齐
      */
     private suspend fun addCharsToLineFirst(
@@ -593,6 +596,7 @@ class TextChapterLayout(
     }
 
     /**
+     * 行内排版调整
      * 无缩进,两端对齐
      */
     private suspend fun addCharsToLineMiddle(

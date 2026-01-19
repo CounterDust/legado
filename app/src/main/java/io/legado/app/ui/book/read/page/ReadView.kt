@@ -46,14 +46,31 @@ import java.util.Locale
 import kotlin.math.abs
 
 /**
- * 阅读视图
+ * 阅读页面核心视图，负责处理页面渲染、触摸交互和翻页动画
+ * 实现FrameLayout作为基础容器，集成多种翻页效果和文本选择功能
  */
 class ReadView(context: Context, attrs: AttributeSet) :
     FrameLayout(context, attrs),
     DataSource, LayoutProgressListener {
 
+    //region ==================== 视图组件声明 ====================
+    // 获取关联Activity的回调接口，用于与Activity通信
     val callBack: CallBack get() = activity as CallBack
+    // 页面工厂类，负责文本页面的生成和管理
     var pageFactory: TextPageFactory = TextPageFactory(this)
+    /**
+     * 翻页代理类，处理不同翻页动画效果,set 等同于 一个set方法
+     * ```
+     * public void setPageDelegate(PageDelegate newValue) {
+     *     if (pageDelegate != null) {
+     *         pageDelegate.onDestroy();
+     *     }
+     *     pageDelegate = null;
+     *     pageDelegate = newValue;
+     *     upContent();
+     * }
+     * ```
+     */
     var pageDelegate: PageDelegate? = null
         private set(value) {
             field?.onDestroy()
@@ -61,64 +78,92 @@ class ReadView(context: Context, attrs: AttributeSet) :
             field = value
             upContent()
         }
+    // 标识当前翻页动画是否为滚动(用于区别滚动和左右)
     override var isScroll = false
-    val prevPage by lazy { PageView(context) }
-    val curPage by lazy { PageView(context) }
-    val nextPage by lazy { PageView(context) }
+    // 三个页面视图
+    val prevPage by lazy { PageView(context) } // 上一页
+    val curPage by lazy { PageView(context) }  // 当前页
+    val nextPage by lazy { PageView(context) } // 下一页
+    // 默认翻页动画速度（毫秒）
     val defaultAnimationSpeed = 300
-    private var pressDown = false
-    private var isMove = false
+    //endregion
 
-    //起始点
+    //region ==================== 触摸交互状态 ====================
+    // 触摸按下状态标识
+    private var pressDown = false
+    // 触摸移动状态标识
+    private var isMove = false
+    // 触摸起始点坐标
     var startX: Float = 0f
     var startY: Float = 0f
-
-    //上一个触碰点
+    // 上一个触摸点坐标，用于计算移动距离
     var lastX: Float = 0f
     var lastY: Float = 0f
-
-    //触碰点
+    // 当前触摸点坐标
     var touchX: Float = 0f
     var touchY: Float = 0f
-
-    //是否停止动画动作
+    // 是否中止动画的标志
     var isAbortAnim = false
+    // 长按相关状态
+    private var longPressed = false     // 长按状态标识
+    private val longPressTimeout = 600L // 长按触发时间阈值（毫秒）
 
-    //长按
-    private var longPressed = false
-    private val longPressTimeout = 600L
+    /**
+     * 长按任务Runnable，延迟执行长按逻辑
+     * Runnable 是一个接口，本质就是一段可被执行的代码任务
+     */
     private val longPressRunnable = Runnable {
-        longPressed = true
-        onLongPress()
+        longPressed = true // 设置长按状态
+        onLongPress()      // 执行长按处理
     }
-    var isTextSelected = false
-    private var pressOnTextSelected = false
+    // 文本选择状态
+    var isTextSelected = false              // 是否处于文本选择模式
+    private var pressOnTextSelected = false // 是否在已选文本上按下
+    // 初始文本位置，用于文本选择范围计算
     private val initialTextPos = TextPos(0, 0, 0)
+    //endregion
 
+    //region ==================== 系统配置和几何计算 ====================
+    // 系统触摸滑动阈值，用于判断是否触发滑动
     private val slopSquare by lazy { ViewConfiguration.get(context).scaledTouchSlop }
+    // 页面滑动阈值，可自定义配置
     private var pageSlopSquare: Int = slopSquare
+    // 滑动阈值的平方，用于距离计算优化（避免开方运算）
     var pageSlopSquare2: Int = pageSlopSquare * pageSlopSquare
-    private val tlRect = RectF()
-    private val tcRect = RectF()
-    private val trRect = RectF()
-    private val mlRect = RectF()
-    private val mcRect = RectF()
-    private val mrRect = RectF()
-    private val blRect = RectF()
-    private val bcRect = RectF()
-    private val brRect = RectF()
-    private val boundary by lazy { BreakIterator.getWordInstance(Locale.getDefault()) }
-    private val upProgressThrottle = throttle(200) { post { upProgress() } }
-    val autoPager = AutoPager(this)
-    val isAutoPage get() = autoPager.isRunning
 
+    // 9宫格区域定义，用于点击区域识别
+    private val tlRect = RectF()  // 左上区域
+    private val tcRect = RectF()  // 中上区域
+    private val trRect = RectF()  // 右上区域
+    private val mlRect = RectF()  // 左中区域
+    private val mcRect = RectF()  // 中心区域
+    private val mrRect = RectF()  // 右中区域
+    private val blRect = RectF()  // 左下区域
+    private val bcRect = RectF()  // 中下区域
+    private val brRect = RectF()  // 右下区域
+
+    // 文本边界迭代器，用于智能文本选择（按单词选择）
+    private val boundary by lazy { BreakIterator.getWordInstance(Locale.getDefault()) }
+    // 进度更新节流器，避免频繁更新进度（200ms间隔）
+    private val upProgressThrottle = throttle(200) { post { upProgress() } }
+
+    // 自动翻页控制器
+    val autoPager = AutoPager(this)
+    // 自动翻页状态检查
+    val isAutoPage get() = autoPager.isRunning
+    //endregion
+
+    //region ==================== 初始化方法 ====================
     init {
+        // 添加三个页面视图，注意添加顺序影响层级（后添加的在上层）
         addView(nextPage)
         addView(curPage)
         addView(prevPage)
         prevPage.invisible()
         nextPage.invisible()
         curPage.markAsMainView()
+        curPage.markAsMainView()
+        // 非设计模式下进行运行时初始化
         if (!isInEditMode) {
             upBg()
             setWillNotDraw(false)
@@ -127,6 +172,10 @@ class ReadView(context: Context, attrs: AttributeSet) :
         }
     }
 
+    /**
+     * 设置9宫格区域坐标
+     * 将屏幕划分为9个矩形区域用于点击识别
+     */
     private fun setRect9x() {
         tlRect.set(0f, 0f, width * 0.33f, height * 0.33f)
         tcRect.set(width * 0.33f, 0f, width * 0.66f, height * 0.33f)
@@ -149,6 +198,9 @@ class ReadView(context: Context, attrs: AttributeSet) :
             callBack.upSystemUiVisibility()
         }
     }
+    //endregion
+
+    //region ==================== 绘制和滚动处理 ====================
 
     override fun dispatchDraw(canvas: Canvas) {
         super.dispatchDraw(canvas)
@@ -160,6 +212,9 @@ class ReadView(context: Context, attrs: AttributeSet) :
         pageDelegate?.computeScroll()
         autoPager.computeOffset()
     }
+    //endregion
+
+    //region ==================== 触摸事件处理 ====================
 
     override fun onInterceptTouchEvent(ev: MotionEvent?): Boolean {
         return true
@@ -522,6 +577,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
     fun upPageAnim(upRecorder: Boolean = false) {
         isScroll = ReadBook.pageAnim() == 3
         ChapterProvider.upLayout()
+        // Kotlin的when()等于Java的switch()
+        // 类型检查避免重复
         when (ReadBook.pageAnim()) {
             PageAnim.coverPageAnim -> if (pageDelegate !is CoverPageDelegate) {
                 pageDelegate = CoverPageDelegate(this)
@@ -543,6 +600,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 pageDelegate = NoAnimPageDelegate(this)
             }
         }
+        // as? 安全类型转换操作符
+        // 成功返回转换后的对象，失败返回null
         (pageDelegate as? ScrollPageDelegate)?.noAnim = AppConfig.noAnimScrollPage
         if (upRecorder) {
             (pageDelegate as? HorizontalPageDelegate)?.upRecorder()
@@ -558,14 +617,16 @@ class ReadView(context: Context, attrs: AttributeSet) :
     }
 
     /**
-     * 更新阅读内容
-     * @param relativePosition 相对位置 -1 上一页 0 当前页 1 下一页
-     * @param resetPageOffset 滚动阅读是是否重置位置
+     * 内容更新方法，实现多模式内容调度
+     * @param relativePosition 相对位置（-1=上一页，0=当前页，1=下一页）
+     * @param resetPageOffset 是否重置滚动偏移量（仅滚动模式有效）
      */
     override fun upContent(relativePosition: Int, resetPageOffset: Boolean) {
+        // 无障碍功能
         post {
             curPage.setContentDescription(pageFactory.curPage.text)
         }
+        // 判断是否为滚动模式且非自动翻页状态
         if (isScroll && !isAutoPage) {
             if (relativePosition == 0) {
                 curPage.setContent(pageFactory.curPage, resetPageOffset)
@@ -576,7 +637,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
             when (relativePosition) {
                 -1 -> prevPage.setContent(pageFactory.prevPage)
                 1 -> nextPage.setContent(pageFactory.nextPage)
-                else -> {
+                else -> { //按需更新，章节切换、首次加载
                     curPage.setContent(pageFactory.curPage, resetPageOffset)
                     nextPage.setContent(pageFactory.nextPage)
                     prevPage.setContent(pageFactory.prevPage)

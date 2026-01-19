@@ -298,6 +298,7 @@ data class TextPage(
     }
 
     fun draw(view: ContentTextView, canvas: Canvas, relativeOffset: Float) {
+        // 优化模式判断
         if (AppConfig.optimizeRender) {
             render(view)
             canvas.withTranslation(0f, relativeOffset) {

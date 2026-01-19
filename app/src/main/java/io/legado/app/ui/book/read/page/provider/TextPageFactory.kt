@@ -7,10 +7,22 @@ import io.legado.app.ui.book.read.page.api.PageFactory
 import io.legado.app.ui.book.read.page.entities.TextPage
 import splitties.init.appCtx
 
+/**
+ * 文本页面工厂类，负责管理阅读页面的生成和导航逻辑
+ * 实现页面缓存、章节切换和页面预加载功能
+ */
 class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource) {
 
     private val keepSwipeTip = appCtx.getString(R.string.keep_swipe_tip)
 
+    /**
+     * ## with函数作用等同于
+     * ```
+     * override fun hasPrev(): Boolean {
+     *     return dataSource.hasPrevChapter() || dataSource.pageIndex > 0
+     * }
+     * ```
+     */
     override fun hasPrev(): Boolean = with(dataSource) {
         return hasPrevChapter() || pageIndex > 0
     }
@@ -79,15 +91,22 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
             false
     }
 
+    // 获取当前页面对象
     override val curPage: TextPage
         get() = with(dataSource) {
+            // 检查是否有系统消息
             ReadBook.msg?.let {
+                // 返回系统消息页面
                 return@with TextPage(text = it).format()
             }
+            // 检查当前页面是否存在
             currentChapter?.let {
+                // 获取指定索引的界面
                 return@with it.getPage(pageIndex)
+                    // 页面为空时返回标题页面
                     ?: TextPage(title = it.title).apply { textChapter = it }.format()
             }
+            // 默认返回空页面
             return TextPage().format()
         }
 

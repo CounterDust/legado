@@ -61,7 +61,10 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     private var isScroll = false
     private val renderRunnable by lazy { Runnable { preRenderPage() } }
 
-    //绘制图片的paint
+    /**
+     * 绘制图片的paint
+     * lazy 懒加载，是一种延迟初始化技术，只有属性在第一次访问时才进行初始化
+     */
     val imagePaint by lazy {
         Paint().apply {
             isAntiAlias = AppConfig.useAntiAlias
@@ -94,11 +97,14 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        // 自动翻页效果
         autoPager?.onDraw(canvas)
+        // 长截图模式处理
         if (longScreenshot) {
             canvas.translate(0f, scrollY.toFloat())
         }
         check(!visibleRect.isEmpty) { "visibleRect 为空" }
+        // 裁剪绘制区域
         canvas.clipRect(visibleRect)
         drawPage(canvas)
     }
@@ -109,8 +115,9 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
     private fun drawPage(canvas: Canvas) {
         var relativeOffset = relativeOffset(0)
         textPage.draw(this, canvas, relativeOffset)
+        // 非滚动模式直接返回
         if (!callBack.isScroll) return
-        //滚动翻页
+        // 滚动翻页
         if (!pageFactory.hasNext()) return
         val textPage1 = relativePage(1)
         relativeOffset += textPage.height

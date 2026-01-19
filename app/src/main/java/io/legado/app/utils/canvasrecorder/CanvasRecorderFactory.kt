@@ -3,6 +3,10 @@ package io.legado.app.utils.canvasrecorder
 import android.os.Build
 import io.legado.app.help.config.AppConfig
 
+/**
+ * 画布工厂(解决兼容性)
+ * 根据版本自动选择版本
+ */
 object CanvasRecorderFactory {
 
     private val atLeastApi24 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N

@@ -55,6 +55,7 @@ import splitties.init.appCtx
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.text.lines
 
 
 @Suppress("MemberVisibilityCanBePrivate")
@@ -683,7 +684,8 @@ object ReadBook : CoroutineScope by MainScope() {
     }
 
     /**
-     * 内容加载完成
+     * 章节内容加载完成后的核心处理函数
+     * 负责内容解析、章节布局、界面更新等完整流程，支持异步处理和错误回调
      */
     @Synchronized
     fun contentLoadFinish(
@@ -695,30 +697,36 @@ object ReadBook : CoroutineScope by MainScope() {
         canceled: Boolean = false,
         success: (() -> Unit)? = null
     ) {
-        removeLoading(chapter.index)
+        removeLoading(chapter.index) // 移除加载状态，防止重复加载
         if (canceled || chapter.index !in durChapterIndex - 1..durChapterIndex + 1) {
             return
         }
-        chapterLoadingJobs[chapter.index]?.cancel()
+        chapterLoadingJobs[chapter.index]?.cancel() // 取消可能存在的旧任务
+
         val job = Coroutine.async(this, start = CoroutineStart.LAZY) {
             val contentProcessor = ContentProcessor.get(book.name, book.origin)
+            // 处理章节标题（应用替换规则）
             val displayTitle = chapter.getDisplayTitle(
                 contentProcessor.getTitleReplaceRules(),
                 book.getUseReplaceRule()
             )
+            // 处理正文内容（应用净化规则）
             val contents = contentProcessor
                 .getContent(book, chapter, content, includeTitle = false)
             ensureActive()
+            // 创建TextChapter对象，触发排版流程
             val textChapter = ChapterProvider.getTextChapterAsync(
                 this, book, chapter, displayTitle, contents, simulatedChapterSize
             )
+            // 计算章节偏移量（相对当前阅读章节）
             when (val offset = chapter.index - durChapterIndex) {
-                0 -> curChapterLoadingLock.withLock {
-                    withContext(Main) {
+                // 当前章
+                0 -> curChapterLoadingLock.withLock { // 上锁防止并发更新
+                    withContext(Main) { // 切换到主线程更新UI数据
                         ensureActive()
                         curTextChapter = textChapter
                     }
-                    callBack?.upMenuView()
+                    callBack?.upMenuView() // 回调更新顶部菜单
                     var available = false
                     for (page in textChapter.layoutChannel) {
                         val index = page.index
@@ -728,7 +736,7 @@ object ReadBook : CoroutineScope by MainScope() {
                             }
                             available = true
                         }
-                        if (upContent && isScroll) {
+                        if (upContent && isScroll) { // 滚动模式下的预渲染优化
                             if (max(index - 3, 0) < durPageIndex) {
                                 callBack?.upContent(offset, false)
                             }
@@ -739,7 +747,7 @@ object ReadBook : CoroutineScope by MainScope() {
                     curPageChanged()
                     callBack?.contentLoadFinish()
                 }
-
+                // 上一章
                 -1 -> prevChapterLoadingLock.withLock {
                     withContext(Main) {
                         ensureActive()
@@ -748,7 +756,7 @@ object ReadBook : CoroutineScope by MainScope() {
                     textChapter.layoutChannel.receiveAsFlow().collect()
                     if (upContent) callBack?.upContent(offset, resetPageOffset)
                 }
-
+                // 下一章
                 1 -> nextChapterLoadingLock.withLock {
                     withContext(Main) {
                         ensureActive()

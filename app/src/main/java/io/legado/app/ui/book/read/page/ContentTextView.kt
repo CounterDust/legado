@@ -114,6 +114,7 @@ class ContentTextView(context: Context, attrs: AttributeSet?) : View(context, at
      */
     private fun drawPage(canvas: Canvas) {
         var relativeOffset = relativeOffset(0)
+        println(relativeOffset)
         textPage.draw(this, canvas, relativeOffset)
         // 非滚动模式直接返回
         if (!callBack.isScroll) return

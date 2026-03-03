@@ -69,17 +69,23 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         AppConfig.detectClickArea()
     }
 
+    //region ==================== 数据初始化 ====================
+    /**
+     * 初始化阅读器配置信息
+     * 根据Intent参数获取书籍信息并更新阅读配置
+     */
     fun initReadBookConfig(intent: Intent) {
         val bookUrl = intent.getStringExtra("bookUrl")
         val book = when {
             bookUrl.isNullOrEmpty() -> appDb.bookDao.lastReadBook
             else -> appDb.bookDao.getBook(bookUrl)
-        } ?: return
+        } ?: return // 为空退出函数,不执行下面代码
         ReadBook.upReadBookConfig(book)
     }
 
     /**
-     * 初始化
+     * 异步初始化阅读器数据
+     * 在后台线程执行书籍加载和初始化操作，支持成功回调
      */
     fun initData(intent: Intent, success: (() -> Unit)? = null) {
         execute {
@@ -105,12 +111,16 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
+    /**
+     * 私有挂起函数：执行具体的书籍初始化流程
+     * 包含书籍信息加载、章节列表获取、内容预加载等核心操作
+     */
     private suspend fun initBook(book: Book) {
         val isSameBook = ReadBook.book?.bookUrl == book.bookUrl
         if (isSameBook) {
-            ReadBook.upData(book)
+            ReadBook.upData(book)  // 同一本书：更新书籍数据但保持阅读状态
         } else {
-            ReadBook.resetData(book)
+            ReadBook.resetData(book)  // 不同书籍：重置阅读器所有数据
         }
         isInitFinish = true
         if (!book.isLocal && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
@@ -124,9 +134,9 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         }
         ReadBook.upMsg(null)
         if (!isSameBook) {
-            ReadBook.loadContent(resetPageOffset = true)
+            ReadBook.loadContent(resetPageOffset = true)  // 新书：重置分页并加载内容
         } else {
-            ReadBook.loadOrUpContent()
+            ReadBook.loadOrUpContent()  // 同一本书：加载或更新内容
         }
         if (ReadBook.chapterChanged) {
             // 有章节跳转不同步阅读进度
@@ -143,6 +153,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             return
         }
     }
+    //endregion
 
     private fun checkLocalBookFileExist(book: Book): Boolean {
         try {

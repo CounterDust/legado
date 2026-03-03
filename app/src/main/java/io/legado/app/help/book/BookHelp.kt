@@ -398,6 +398,7 @@ object BookHelp {
      * 读取章节内容
      */
     fun getContent(book: Book, bookChapter: BookChapter): String? {
+        // 文件缓存检查（网络）
         val file = downloadDir.getFile(
             cacheFolderName,
             book.getFolderName(),
@@ -410,6 +411,7 @@ object BookHelp {
             }
             return string
         }
+        // 本地书籍处理
         if (book.isLocal) {
             val string = LocalBook.getContent(book, bookChapter)
             if (string != null && book.isEpub) {

@@ -326,7 +326,8 @@ object ChapterProvider {
 
         val textChapter = TextChapter(
             bookChapter,
-            bookChapter.index, displayTitle,
+            bookChapter.index,
+            displayTitle,
             chapterSize,
             bookContent.sameTitleRemoved,
             bookChapter.isVip,

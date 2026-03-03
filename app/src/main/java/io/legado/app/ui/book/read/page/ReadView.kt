@@ -162,7 +162,6 @@ class ReadView(context: Context, attrs: AttributeSet) :
         prevPage.invisible()
         nextPage.invisible()
         curPage.markAsMainView()
-        curPage.markAsMainView()
         // 非设计模式下进行运行时初始化
         if (!isInEditMode) {
             upBg()
@@ -216,12 +215,19 @@ class ReadView(context: Context, attrs: AttributeSet) :
 
     //region ==================== 触摸事件处理 ====================
 
+    /**
+     * onInterceptTouchEvent(MotionEvent) - 事件拦截器
+     * 职责：判断当前ViewGroup是否要拦截事件，阻止事件向子View传递
+     * 调用时机：在dispatchTouchEvent中，分发给子View之前
+     */
     override fun onInterceptTouchEvent(ev: MotionEvent?): Boolean {
         return true
     }
 
     /**
-     * 触摸事件
+     * onTouchEvent(MotionEvent) - 事件最终处理器
+     * 职责：处理具体的事件逻辑，是事件传递的终点
+     * 调用时机：当事件没有被消费时调用
      */
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {

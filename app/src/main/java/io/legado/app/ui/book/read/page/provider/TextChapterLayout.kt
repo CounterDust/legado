@@ -201,8 +201,8 @@ class TextChapterLayout(
         val isSingleImageStyle = imageStyle.equals(Book.imgStyleSingle, true)
         val isTextImageStyle = imageStyle.equals(Book.imgStyleText, true)
 
+        // 章节标题处理逻辑
         if (titleMode != 2 || bookChapter.isVolume || contents.isEmpty()) {
-            //标题非隐藏
             displayTitle.splitNotBlank("\n").forEach { text ->
                 setTypeText(
                     book,
@@ -226,12 +226,12 @@ class TextChapterLayout(
             }
         }
 
+        // 正文内容处理核心逻辑
         val sb = StringBuffer()
         var isSetTypedImage = false
         contents.forEach { content ->
             currentCoroutineContext().ensureActive()
-            if (isTextImageStyle) {
-                //图片样式为文字嵌入类型
+            if (isTextImageStyle) { // 文本嵌入图片模式处理
                 var text = content.replace(ChapterProvider.srcReplaceChar, "▣")
                 val srcList = LinkedList<String>()
                 sb.setLength(0)
@@ -253,13 +253,13 @@ class TextChapterLayout(
                     imageStyle,
                     srcList = srcList
                 )
-            } else {
+            } else { // 普通图片模式处理、纯文本模式处理
                 if (isSingleImageStyle && isSetTypedImage) {
                     isSetTypedImage = false
                     prepareNextPageIfNeed()
                 }
                 var start = 0
-                if (content.contains("<img")) {
+                if (content.contains("<img")) { // 普通图片模式处理
                     val matcher = AppPattern.imgPattern.matcher(content)
                     while (matcher.find()) {
                         currentCoroutineContext().ensureActive()
@@ -285,7 +285,7 @@ class TextChapterLayout(
                         start = matcher.end()
                     }
                 }
-                if (start < content.length) {
+                if (start < content.length) { // 纯文本模式处理
                     if (isSingleImageStyle && isSetTypedImage) {
                         isSetTypedImage = false
                         prepareNextPageIfNeed()
@@ -421,7 +421,7 @@ class TextChapterLayout(
             StaticLayout(text, textPaint, visibleWidth, Layout.Alignment.ALIGN_NORMAL, 0f, 0f, true)
         }
         durY = when {
-            //标题y轴居中
+            // 空章节，标题居中处理
             emptyContent && textPages.isEmpty() -> {
                 val textPage = pendingTextPage
                 if (textPage.lineSize == 0) {
@@ -441,7 +441,7 @@ class TextChapterLayout(
                     durY - textLayoutHeight
                 }
             }
-
+            // 首章标题特殊处理
             isTitle && textPages.isEmpty() && pendingTextPage.lines.isEmpty() -> {
                 when (imageStyle?.uppercase()) {
                     Book.imgStyleSingle -> {
@@ -452,11 +452,12 @@ class TextChapterLayout(
                     else -> durY + titleTopSpacing
                 }
             }
-
+            // 普通文本的正常排列
             else -> durY
         }
         for (lineIndex in 0 until layout.lineCount) {
             val textLine = TextLine(isTitle = isTitle)
+            // 检查是否需要分页
             prepareNextPageIfNeed(durY + textHeight)
             val lineStart = layout.getLineStart(lineIndex)
             val lineEnd = layout.getLineEnd(lineIndex)
@@ -464,16 +465,15 @@ class TextChapterLayout(
             val (words, widths) = measureTextSplit(lineText, widthsArray, lineStart)
             val desiredWidth = widths.fastSum()
             textLine.text = lineText
-            when {
-                lineIndex == 0 && layout.lineCount > 1 && !isTitle && isFirstLine -> {
+            when (lineIndex) {
+                0 if layout.lineCount > 1 && !isTitle && isFirstLine -> {
                     //多行的第一行 非标题
                     addCharsToLineFirst(
                         book, absStartX, textLine, words, textPaint,
                         desiredWidth, widths, srcList
                     )
                 }
-
-                lineIndex == layout.lineCount - 1 -> {
+                layout.lineCount - 1 -> {
                     //最后一行、单行
                     //标题x轴居中
                     val startX = if (
@@ -490,7 +490,6 @@ class TextChapterLayout(
                         startX, !isTitle && lineIndex == 0, widths, srcList
                     )
                 }
-
                 else -> {
                     if (
                         isTitle &&
@@ -762,19 +761,42 @@ class TextChapterLayout(
         }
     }
 
+    /**
+     * 分页控制核心方法，负责管理文本排版过程中的页面切换逻辑
+     *
+     * 主要功能：
+     * 1. 检测当前页面剩余空间是否足够容纳新内容
+     * 2. 处理单页/双页模式下的复杂分页策略
+     * 3. 维护页面构建状态和坐标系统的正确性
+     * 4. 在适当时机完成当前页并初始化新页面
+     *
+     * 分页触发条件：
+     * - 预期内容高度超过页面可见高度
+     * - 强制分页请求（如图片排版、特殊格式要求）
+     *
+     * 双页模式特殊处理：
+     * 左列排满后切换到右列继续排版，右列排满后才真正完成页面
+     *
+     * 状态管理：
+     * - 垂直坐标(durY)和水平坐标(absStartX)的重置
+     * - 文本累积器(stringBuilder)的清空
+     * - 页面对象(pendingTextPage)的重新初始化
+     */
     private suspend fun prepareNextPageIfNeed(requestHeight: Float = -1f) {
+        // requestHeight > visibleHeight: 预期内容高度超过页面可见高度
+        // requestHeight == -1f: 强制分页（如图片排版、标题处理等特殊情况）
         if (requestHeight > visibleHeight || requestHeight == -1f) {
             val textPage = pendingTextPage
             // 双页的 durY 不正确，可能会小于实际高度
             if (textPage.height < durY) {
                 textPage.height = durY
             }
+            // 双页模式特殊处理
             if (doublePage && absStartX < viewWidth / 2) {
                 //当前页面左列结束
                 textPage.leftLineSize = textPage.lineSize
                 absStartX = viewWidth / 2 + paddingLeft
-            } else {
-                //当前页面结束,设置各种值
+            } else { // 单页完成/双页右列完成处理
                 if (textPage.leftLineSize == 0) {
                     textPage.leftLineSize = textPage.lineSize
                 }

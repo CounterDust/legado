@@ -103,7 +103,7 @@ class TextPageFactory(dataSource: DataSource) : PageFactory<TextPage>(dataSource
             currentChapter?.let {
                 // 获取指定索引的界面
                 return@with it.getPage(pageIndex)
-                    // 页面为空时返回标题页面
+                // 页面为空时返回标题页面
                     ?: TextPage(title = it.title).apply { textChapter = it }.format()
             }
             // 默认返回空页面

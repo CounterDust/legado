@@ -292,6 +292,9 @@ class ReadBookActivity : BaseReadBookActivity(),
         }
     }
 
+    /**
+     * 	在onStart()后调用，表示onCreate方法已彻底执行完毕。常用于需要等Activity完全建立后才进行的初始化，例如同步ActionBarDrawerToggle的状态。
+     */
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         viewModel.initReadBookConfig(intent)
